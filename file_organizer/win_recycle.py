@@ -36,6 +36,8 @@ class WindowsRecycleBin:
         import msvcrt
         path=Path(snapshot['path']);root=Path(snapshot['root']['path'])
         before=validate_file(root,path)
+        expected=(int(snapshot['device_id']),int(snapshot['inode']),snapshot['size'],snapshot['mtime_ns'],snapshot['ctime_ns'])
+        if identity(before)!=expected:raise SafetyError('Identité source modifiée depuis le plan ; retrait interdit.')
         stage=f'.FileOrganizer-retrait-{uuid.uuid4().hex[:12]}-{path.stem[:60]}{path.suffix[:15]}'
         k=ctypes.WinDLL('kernel32',use_last_error=True)
         k.CreateFileW.argtypes=[w.LPCWSTR,w.DWORD,w.DWORD,w.LPVOID,w.DWORD,w.DWORD,w.HANDLE]
@@ -54,6 +56,8 @@ class WindowsRecycleBin:
                     st=file_stat(fd=source.fileno())
                     if is_link(st) or st.st_nlink!=1 or identity(st)!=identity(before) or digest(source)!=snapshot['sha256']:
                         raise SafetyError('Source modifiée ou utilisée : aucun nettoyage.')
+                    if identity(file_stat(fd=source.fileno()))!=identity(before):
+                        raise SafetyError('Source modifiée pendant la relecture ; retrait annulé.')
                     archive_guard()
                     def rename_to(target):
                         encoded=str(target).encode('utf-16-le')
@@ -67,8 +71,10 @@ class WindowsRecycleBin:
                     k.GetFinalPathNameByHandleW.argtypes=[w.HANDLE,w.LPWSTR,w.DWORD,w.DWORD]
                     actual_buffer=ctypes.create_unicode_buffer(32768)
                     if not k.GetFinalPathNameByHandleW(msvcrt.get_osfhandle(source.fileno()),actual_buffer,len(actual_buffer),0):
-                        rename_to(path)
-                        raise ctypes.WinError(ctypes.get_last_error())
+                        code=ctypes.get_last_error()
+                        try:rename_to(path)
+                        except Exception as e:raise RecoveryRequired('Impossible de confirmer le nom natif ; contrôler '+str(folder.path/stage),str(folder.path/stage)) from e
+                        raise ctypes.WinError(code)
                     actual=actual_buffer.value
                     if actual.startswith('\\\\?\\'):actual=actual[4:]
                     if os.path.normcase(actual)!=os.path.normcase(str(folder.path/stage)):
