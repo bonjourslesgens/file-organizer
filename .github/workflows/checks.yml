@@ -38,7 +38,16 @@ jobs:
           python-version: '3.12'
       - name: Executable autonome, tests du binaire et installateur Inno Setup
         shell: pwsh
-        run: ./Construire-Windows.ps1 -Installer
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'fileorganizer-build.log'
+          try {
+            ./Construire-Windows.ps1 -Installer -SkipSourceTests 2>&1 | Tee-Object -FilePath $log
+          } catch {
+            $details = ($_ | Out-String) + (Get-Content $log -Tail 70 | Out-String)
+            $escaped = $details.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Host "::error title=Details construction Windows::$escaped"
+            exit 1
+          }
       - name: Installation silencieuse puis verification de l application installee
         shell: pwsh
         run: |
@@ -48,16 +57,27 @@ jobs:
           if ($p.ExitCode -ne 0) { throw 'Installation echouee' }
           python -m tests.binary_smoke --exe (Join-Path $installPath 'FileOrganizer.exe')
           if ($LASTEXITCODE -ne 0) { throw 'Verification apres installation echouee' }
+          # Prepare real synthetic default configuration/index, then prove reinstall preserves their bytes.
+          python -c "from file_organizer.server import Application; from file_organizer.config import default_state_dir; a=Application(default_state_dir()); a.config.settings(onboarding_completed=True); a.close()"
+          if ($LASTEXITCODE -ne 0) { throw 'Preparation de la persistance echouee' }
+          $dataPath = Join-Path $env:LOCALAPPDATA 'FileOrganizer'
+          $configBefore = (Get-FileHash (Join-Path $dataPath 'config.json')).Hash
+          $indexBefore = (Get-FileHash (Join-Path $dataPath 'inventory.sqlite3')).Hash
           # Rerun the installer to exercise an in-place update of the application files.
           $p = Start-Process -FilePath $setup.FullName -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw 'Reinstallation echouee' }
+          if ((Get-FileHash (Join-Path $dataPath 'config.json')).Hash -ne $configBefore) { throw 'Configuration alteree par la mise a jour' }
+          if ((Get-FileHash (Join-Path $dataPath 'inventory.sqlite3')).Hash -ne $indexBefore) { throw 'Index altere par la mise a jour' }
+          Write-Host '::notice title=Persistance installateur::Configuration et index par defaut identiques avant et apres reinstallation.'
           python -m tests.binary_smoke --exe (Join-Path $installPath 'FileOrganizer.exe')
           if ($LASTEXITCODE -ne 0) { throw 'Verification apres reinstallation echouee' }
       - uses: actions/upload-artifact@v4
+        if: ${{ always() && hashFiles('dist/PORTABLE_VALIDATED.txt') != '' }}
         with:
           name: FileOrganizer-0.3-Windows-x64
           path: |
             dist/FileOrganizer.exe
             dist/FileOrganizer-Setup-*-Windows-x64.exe
             dist/SHA256SUMS.txt
+            dist/PORTABLE_VALIDATED.txt
           if-no-files-found: error
