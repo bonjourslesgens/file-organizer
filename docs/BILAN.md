@@ -35,12 +35,13 @@ L’assistant n’autorise jamais le nettoyage et n’écrit pas sur le support 
 | Installateur Inno Setup | Construit, installé silencieusement, binaire installé testé, puis réinstallé et retesté ; configuration et index par défaut conservés octet pour octet |
 | Paquet Python | Wheel 0.3.0 construite, installée dans un environnement distinct hors dépôt, ressources et démarrage HTTP vérifiés |
 
-Exécution de référence : [workflow réussi du commit bec315e](https://github.com/bonjourslesgens/file-organizer/actions/runs/40692275842),
-le 28 octobre 2026 (4 min 58 s). Les deux matrices et la distribution sont vertes.
-L’artefact **FileOrganizer-0.3-Windows-x64** (27,9 Mo compressés) contient le portable, l’installateur
+Exécution de référence : [workflow réussi du commit e5b2436](https://github.com/bonjourslesgens/file-organizer/actions/runs/40693111624),
+le 28 octobre 2026 (3 min 59 s). Les deux matrices et la distribution sont vertes.
+L’artefact [FileOrganizer-0.3-Windows-x64](https://github.com/bonjourslesgens/file-organizer/actions/runs/40693111624/artifacts/12817598978) (27,9 Mo compressés) contient le portable, l’installateur
 et leurs sommes SHA-256. Il se télécharge depuis la rubrique Artifacts, après connexion GitHub si demandée.
-Les guides 0.3 et les témoins explicites de validation sont intégrés à la construction finale suivante,
-avec le même code applicatif. Les rapports JSON Linux et Windows sont des artefacts séparés du workflow.
+Les guides 0.3 et les témoins `PORTABLE_VALIDATED.txt` / `INSTALLER_VALIDATED.txt` sont intégrés
+à cette distribution finale validée. Somme SHA-256 du ZIP Actions :
+`699c2c55d144a859a44bad00598b6a83cb095cf87535a9b8fe81255112c7324a`. Les rapports JSON Linux et Windows sont des artefacts séparés du workflow.
 
 Le test du binaire retire Python de PATH et efface PYTHONPATH/PYTHONHOME pour ses lancements.
 Il exerce trois distributions : portable, application installée puis application réinstallée.
@@ -130,6 +131,9 @@ python -m tests.ci_runner
 python -m tests.binary_smoke --source
 python -m tests.browser_smoke --artifacts /workspace/artifacts/v03
 ```
+
+Le code complet est poussé sur `codex/fileorganizer-v03`. Le présent bilan ajoute les liens de résultat
+après la construction ; aucun code applicatif n’a changé depuis le commit compilé.
 
 Sous Windows : `./Construire-Windows.ps1 -Installer`. Le workflow construit puis teste le binaire,
 installe et réinstalle ; consulter le résultat effectif de chaque étape avant de conclure.
