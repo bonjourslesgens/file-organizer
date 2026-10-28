@@ -20,6 +20,7 @@ from .transfers import Transfers
 from .android import Android, PUBLIC_ROOTS
 from .automation import Automation
 from .cleanup import Cleanup
+from .setup_flow import SetupFlow
 from . import __version__
 import threading
 
@@ -39,6 +40,7 @@ class Application:
         self.transfers = Transfers(self.config, self.db, self.storage, self.android)
         self.cleanup = Cleanup(self.config,self.db,self.transfers)
         self.automation = Automation(self)
+        self.setup = SetupFlow(self)
 
     def busy(self, ignore_automation=False):
         return bool((self.scanner.thread and self.scanner.thread.is_alive()) or self.transfers.busy() or self.cleanup.busy() or self.android.busy() or
@@ -138,7 +140,7 @@ def make_server(app: Application, port=8765):
             parsed = urlsplit(self.path)
             path = parsed.path
             if not path.startswith('/api/'):
-                files = {'/': ('index.html', 'text/html; charset=utf-8'), '/app.js': ('app.js', 'text/javascript; charset=utf-8'), '/style.css': ('style.css', 'text/css; charset=utf-8')}
+                files = {'/': ('index.html', 'text/html; charset=utf-8'), '/workflow.js': ('workflow.js','text/javascript; charset=utf-8'), '/app.js': ('app.js', 'text/javascript; charset=utf-8'), '/style.css': ('style.css', 'text/css; charset=utf-8')}
                 if path not in files:
                     return self.reply(404, {'error': 'Ressource introuvable.'})
                 filename, kind = files[path]
@@ -157,8 +159,14 @@ def make_server(app: Application, port=8765):
             if path == '/api/preview':
                 content,mime=app.preview(int(value('id')))
                 return self.reply(200,content,mime)
+            if path == '/api/setup/discover':
+                return self.reply(200,app.setup.discover())
+            if path == '/api/setup/result':
+                return self.reply(200,app.setup.result(value('id')))
             if path == '/api/cleanup/candidates':
-                return self.reply(200,app.cleanup.candidates(value('transfer_id')))
+                with app.operation_lock:
+                    if app.busy():return self.reply(409,{'error':'Attendez la fin de l’opération active avant de revérifier les sources.'})
+                    return self.reply(200,app.cleanup.candidates(value('transfer_id')))
             if path == '/api/cleanup':
                 return self.reply(200,app.cleanup.get(value('id')))
             if path == '/api/transfers':
@@ -190,7 +198,7 @@ def make_server(app: Application, port=8765):
             if path == '/api/report':
                 fmt = value('format', 'json')
                 if fmt == 'json':
-                    return self.reply(200, {'stats': app.db.stats(), 'scan': app.scanner.snapshot(), 'roots': app.roots(), 'notice': 'Inventaire local et Android ; copies uniquement après validation explicite, aucune suppression.', 'transfers': app.transfers.list()}, extra={'Content-Disposition': 'attachment; filename="rapport.json"'})
+                    return self.reply(200, {'stats': app.db.stats(), 'scan': app.scanner.snapshot(), 'roots': app.roots(), 'notice': 'Inventaire local et Android ; copies et mises à la Corbeille uniquement sur confirmations distinctes, aucun retrait automatique.', 'transfers': app.transfers.list()}, extra={'Content-Disposition': 'attachment; filename="rapport.json"'})
                 if fmt != 'csv':
                     raise ValueError('Format inconnu.')
                 output = io.StringIO(newline='')
@@ -224,7 +232,13 @@ def make_server(app: Application, port=8765):
                     busy = app.busy()
                     if busy and path in ('/api/roots/add', '/api/roots/remove', '/api/rules', '/api/simulate', '/api/transfers/prepare', '/api/transfers/start', '/api/transfers/resume', '/api/android/authorize', '/api/android/remove', '/api/android/settings', '/api/android/scan', '/api/android/simulate', '/api/cleanup/prepare', '/api/cleanup/start', '/api/cleanup/manual', '/api/cleanup/permission', '/api/setup/apply'):
                         return self.reply(409, {'error': 'Une opération est en cours. Attendez sa fin ou mettez-la en pause.'})
-                    if path == '/api/cleanup/permission':
+                    if path == '/api/setup/source':
+                        result=app.setup.validate_source(body['path'])
+                    elif path == '/api/setup/apply':
+                        result=app.setup.apply(body)
+                    elif path == '/api/setup/finish':
+                        result=app.setup.finish(body['id'])
+                    elif path == '/api/cleanup/permission':
                         result=app.config.allow_cleanup(body['root_id'],body['enabled'],body.get('kind','local'))
                         app.db.event('cleanup_permission_changed','Propositions de nettoyage '+('autorisées' if body['enabled'] else 'désactivées')+' : '+result['path'])
                     elif path == '/api/cleanup/prepare':

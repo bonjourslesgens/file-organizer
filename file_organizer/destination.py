@@ -7,6 +7,7 @@ from pathlib import Path
 import stat
 
 from .safety import SafetyError, check_components, is_link
+from .paths import native_path
 
 
 @contextmanager
@@ -33,19 +34,19 @@ def directory(base, relative, create=True):
         else:
             from ctypes import wintypes as w
             k = ctypes.WinDLL('kernel32', use_last_error=True)
-            create = k.CreateFileW
-            create.argtypes = [w.LPCWSTR,w.DWORD,w.DWORD,w.LPVOID,w.DWORD,w.DWORD,w.HANDLE]
-            create.restype = w.HANDLE
+            create_file = k.CreateFileW
+            create_file.argtypes = [w.LPCWSTR,w.DWORD,w.DWORD,w.LPVOID,w.DWORD,w.DWORD,w.HANDLE]
+            create_file.restype = w.HANDLE
             k.CloseHandle.argtypes = [w.HANDLE]
             path = Path(base.anchor)
             for i, part in enumerate((*base.parts[1:], *relative.parts)):
                 path = path / part
                 if create and i >= len(base.parts)-1:
                     try:
-                        path.mkdir()
+                        os.mkdir(native_path(path))
                     except FileExistsError:
                         pass
-                h = create('\\\\?\\'+str(path),0x80,3,None,3,0x02200000,None)
+                h = create_file('\\\\?\\'+str(path),0x80,3,None,3,0x02200000,None)
                 if h == w.HANDLE(-1).value:
                     raise ctypes.WinError(ctypes.get_last_error())
                 handles.append(h)

@@ -10,6 +10,7 @@ import threading
 import time
 import uuid
 
+from .paths import native_path,display_path
 from .safety import (BLOCKED_NAMES, SafetyError, identity, is_link, is_project,
                      open_personal, validate_root)
 
@@ -183,9 +184,9 @@ class Scanner:
                     root_incomplete = True
                     self._increment('errors')
                     self.db.event('read_error', str(error), 'warning')
-                for folder, dirs, names in os.walk(root, topdown=True, followlinks=False, onerror=walk_error):
+                for folder, dirs, names in os.walk(native_path(root), topdown=True, followlinks=False, onerror=walk_error):
                     self._check_cancel()
-                    directory = Path(folder)
+                    directory = Path(display_path(folder))
                     # Recheck before descending, including the root itself.
                     try:
                         from .safety import check_components
@@ -197,7 +198,7 @@ class Scanner:
                         safe_dirs = []
                         for name in dirs:
                             child = directory / name
-                            if name.casefold() in BLOCKED_NAMES or name.startswith('.') or is_link(child.lstat()) or is_project(child):
+                            if name.casefold() in BLOCKED_NAMES or name.startswith('.') or is_link(os.lstat(native_path(child))) or is_project(child):
                                 self._increment('skipped')
                             else:
                                 safe_dirs.append(name)

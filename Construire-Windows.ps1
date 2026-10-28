@@ -6,7 +6,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Python 3.11+ est requis pour la construction s
 $python = Join-Path $PSScriptRoot '.venv-build\Scripts\python.exe'
 & $python -m pip install . 'pyinstaller==6.16.0'
 if ($LASTEXITCODE -ne 0) { throw 'Installation de PyInstaller impossible.' }
-& $python -m unittest discover -v
+& $python -m tests.ci_runner
 if ($LASTEXITCODE -ne 0) { throw 'Les tests ont echoue. Aucun executable ne sera construit.' }
 $version = & $python -c 'from file_organizer import __version__; print(__version__)'
 & $python -m PyInstaller --noconfirm --clean --onefile --name FileOrganizer --version-file windows/version_info.txt --add-data 'file_organizer/static;file_organizer/static' launcher.py

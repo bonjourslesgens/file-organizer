@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path, PureWindowsPath
 import stat
+from .paths import native_path,display_path
 
 
 class SafetyError(ValueError):
@@ -46,22 +47,23 @@ def check_components(path: Path) -> Path:
             raise SafetyError(f'Emplacement protégé ou applicatif : {part}')
     # Walk from the volume down so lstat never follows an unchecked ancestor.
     for ancestor in reversed((path, *path.parents)):
-        st = ancestor.lstat()
+        st = os.lstat(native_path(ancestor))
         if is_link(st):
             raise SafetyError('Lien symbolique ou jonction exclu.')
-    resolved = path.resolve(strict=True)
+    resolved = Path(display_path(os.path.realpath(native_path(path),strict=True)))
     if os.path.normcase(str(resolved)) != os.path.normcase(str(path)):
         raise SafetyError('Chemin équivalent ou redirigé exclu.')
     return resolved
 
 
 def is_project(path: Path) -> bool:
-    return (path / '.git').is_file() or (path / '.git' / 'HEAD').exists() or any((path / marker).exists() for marker in PROJECT_MARKERS)
+    native=Path(native_path(path))
+    return (native / '.git').is_file() or (native / '.git' / 'HEAD').exists() or any((native / marker).exists() for marker in PROJECT_MARKERS)
 
 
 def validate_root(raw: str, state_dir: Path | None = None) -> Path:
     path = check_components(Path(raw).expanduser())
-    if not path.is_dir():
+    if not os.path.isdir(native_path(path)):
         raise SafetyError('Le dossier doit exister et être accessible.')
     if path == Path(path.anchor) or path == Path.home().resolve():
         raise SafetyError('Autorisez un dossier personnel précis, pas un disque ni le profil entier.')
@@ -77,7 +79,7 @@ def validate_root(raw: str, state_dir: Path | None = None) -> Path:
 
 def file_stat(path=None,fd=None):
     """Consistent NTFS ChangeTime: Python 3.12 stat/ fstat disagree about st_ctime."""
-    raw=os.fstat(fd) if fd is not None else Path(path).lstat()
+    raw=os.fstat(fd) if fd is not None else os.lstat(native_path(path))
     if os.name!='nt':return raw
     import ctypes
     from ctypes import wintypes as w

@@ -6,6 +6,7 @@
   <meta name="organizer-token" content="__SESSION_TOKEN__">
   <title>File Organizer · Votre espace, en clair</title>
   <link rel="stylesheet" href="/style.css">
+  <script src="/workflow.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -32,6 +33,7 @@
     <a href="#duplicates" data-view="duplicates"><svg><use href="#i-copy"/></svg>Doublons</a>
     <a href="#archive" data-view="archive"><svg><use href="#i-archive"/></svg>Archivage</a>
     <a href="#rules" data-view="rules"><svg><use href="#i-sliders"/></svg>Règles</a>
+    <a href="#cleanup" data-view="cleanup"><svg><use href="#i-shield"/></svg>Nettoyage</a>
     <a href="#automation" data-view="automation"><svg><use href="#i-sliders"/></svg>Automatisation</a>
     <a href="#devices" data-view="devices"><svg><use href="#i-drive"/></svg>Appareils</a>
     <a href="#notifications" data-view="notifications"><svg><use href="#i-shield"/></svg>Notifications<span id="notification-count" class="nav-count">0</span></a>
@@ -39,7 +41,7 @@
   </nav>
   <p class="nav-caption second-caption">CONFIGURATION</p>
   <nav aria-label="Configuration"><a href="#roots" data-view="roots"><svg><use href="#i-drive"/></svg>Dossiers autorisés</a></nav>
-  <div class="sidebar-bottom"><div class="local-indicator"><span></span>Local & confidentiel</div><p>Vos fichiers restent sur vos appareils.</p><small>VERSION 0.2 · LOCAL</small></div>
+  <div class="sidebar-bottom"><div class="local-indicator"><span></span>Local & confidentiel</div><p>Vos fichiers restent sur vos appareils.</p><small>VERSION 0.3 · LOCAL</small></div>
 </aside>
 <div class="workspace">
   <header class="topbar"><span id="breadcrumb">Votre espace <span>/</span> Vue d’ensemble</span><div class="topbar-right"><span class="mode-pill"><svg><use href="#i-shield"/></svg><span id="current-mode">Simulation par défaut</span></span><span class="avatar" title="Session locale">LO</span></div></header>
@@ -48,7 +50,7 @@
     <section class="page-heading"><div><p class="eyebrow">UN PEU D’ORDRE, BEAUCOUP D’ESPACE.</p><h1 id="page-title">Vue d’ensemble</h1><p id="page-description">Retrouvez vos fichiers. Comprenez votre stockage. Gardez le contrôle.</p></div><div class="heading-actions"><button id="export-report" class="button secondary"><svg><use href="#i-download"/></svg>Rapport</button><button id="start-scan" class="button primary"><svg><use href="#i-search"/></svg>Analyser mes dossiers</button></div></section>
     <div id="scan-status" class="scan-status" role="status" aria-live="polite" hidden></div>
     <div id="view-content"><div class="empty">Chargement de votre espace…</div></div>
-    <footer><span><span class="small-dot"></span>Traitement local · Aucun abonnement</span><span>Copies après validation · Originaux conservés</span></footer>
+    <footer><span><span class="small-dot"></span>Traitement local · Aucun abonnement</span><span>Copies et retraits sur confirmations séparées</span></footer>
   </main>
 </div>
 <div id="toast" role="status" hidden></div>

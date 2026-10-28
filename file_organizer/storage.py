@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import time
 
+from .paths import native_path,display_path
 from .safety import SafetyError, validate_root, check_components
 
 KNOWN_FS = {'ntfs', 'exfat', 'fat32', 'vfat', 'ext2', 'ext3', 'ext4', 'xfs', 'btrfs', 'f2fs', 'tmpfs', 'overlay'}
@@ -42,8 +43,9 @@ def windows_volume(path):
     k = ctypes.WinDLL('kernel32', use_last_error=True)
     volume_path = ctypes.create_unicode_buffer(1024)
     k.GetVolumePathNameW.argtypes = [w.LPCWSTR, w.LPWSTR, w.DWORD]
-    if not k.GetVolumePathNameW(str(path), volume_path, len(volume_path)):
+    if not k.GetVolumePathNameW(native_path(path), volume_path, len(volume_path)):
         raise ctypes.WinError(ctypes.get_last_error())
+    volume_path.value=display_path(volume_path.value)
     if Path(volume_path.value) != Path(path.anchor):
         raise SafetyError('Volume monté en sous-dossier non pris en charge : utilisez sa propre lettre de lecteur.')
     label, fs, guid = (ctypes.create_unicode_buffer(1024) for _ in range(3))
@@ -72,8 +74,8 @@ class Storage:
                   'health':'non mesurée', 'model':'non disponible', 'non_destructive':True}
         try:
             path = check_components(Path(str(raw)).expanduser())
-            if not path.is_dir(): raise SafetyError('Un volume ou un dossier existant est requis.')
-            st = path.stat()
+            if not os.path.isdir(native_path(path)): raise SafetyError('Un volume ou un dossier existant est requis.')
+            st = os.stat(native_path(path))
             volume = windows_volume(path) if os.name == 'nt' else linux_mount(path)
             result.update(volume)
             if os.name != 'nt' and shutil.which('findmnt'):
@@ -83,8 +85,8 @@ class Storage:
                     rows = json.loads(proc.stdout).get('filesystems', [])
                     if rows and rows[0].get('uuid'):
                         result['volume_uuid'] = rows[0]['uuid']
-            usage = shutil.disk_usage(path)
-            result.update(capacity=usage.total, free=usage.free, used=usage.used, accessible=os.access(path, os.R_OK),
+            usage = shutil.disk_usage(native_path(path))
+            result.update(capacity=usage.total, free=usage.free, used=usage.used, accessible=os.access(native_path(path), os.R_OK),
                           directory_id=f'{st.st_dev}:{st.st_ino}', path=str(path))
             if os.name == 'nt':
                 # Required Windows health evidence; fail closed if unavailable.
@@ -105,7 +107,7 @@ class Storage:
                         result.update(model=rows[0].get('model') or 'modèle non exposé', disk_capacity=rows[0].get('size'))
             if result['filesystem'].lower() not in KNOWN_FS:
                 result['anomalies'].append('Système de fichiers inconnu ou non pris en charge.')
-            if result['read_only'] or not os.access(path, os.W_OK):
+            if result['read_only'] or not os.access(native_path(path), os.W_OK):
                 result['anomalies'].append('Volume en lecture seule ou droits d’écriture absents.')
             if not result['accessible']:
                 result['anomalies'].append('Dossier inaccessible en lecture.')
@@ -130,7 +132,7 @@ class Storage:
 
     def guard(self, base, info):
         """Cheap check between blocks: detect detached/replaced mounts, including same path."""
-        st = base.stat()
+        st = os.stat(native_path(base))
         if f'{st.st_dev}:{st.st_ino}' != info['directory_id']:
             raise SafetyError('Destination déconnectée ou remplacée.')
         current = windows_volume(base) if os.name == 'nt' else linux_mount(base)

@@ -16,6 +16,7 @@ DEFAULTS = {
     'adb_path': '',
     'sensitive_patterns': ['*password*','*mot-de-passe*','*secret*','*recovery*','*seed*','*.key','*.pem','*.pfx','*.p12'],
     'onboarding_completed': False,
+    'archive_destination': '',
     'automation': {'enabled': False, 'interval_seconds': 300, 'destination': ''},
     'keyword_categories': {
         'Études': ['cours', 'étude', 'examen', 'mémoire', 'université'],
@@ -45,7 +46,7 @@ class Config:
         self.lock = threading.RLock()
         if self.path.exists():
             self.data = json.loads(self.path.read_text(encoding='utf-8'))
-            for key in ('android_roots','adb_path','automation','onboarding_completed','sensitive_patterns'):
+            for key in ('android_roots','adb_path','automation','onboarding_completed','sensitive_patterns','archive_destination'):
                 self.data.setdefault(key, deepcopy(DEFAULTS[key]))
             self.validate(self.data)
         else:
