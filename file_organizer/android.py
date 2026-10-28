@@ -258,7 +258,7 @@ class Android:
         """Read-only per-file check; never treats a transport/permission failure as deletion."""
         entry=snapshot['root'];path=validate_path(snapshot['path']);root=validate_path(entry['path'])
         current=next((r for r in self.config.snapshot()['android_roots'] if r['id']==entry['id'] and r['serial']==entry['serial'] and r['path']==entry['path']),None)
-        if not current or not current.get('cleanup_allowed'):
+        if not current or current.get('cleanup_allowed') is not True:
             raise SafetyError('Autorisation de nettoyage Android absente.')
         canonical_root=self.shell(entry['serial'],'readlink -f '+shlex.quote(str(root)))
         actual_parent=self.shell(entry['serial'],'readlink -f '+shlex.quote(str(path.parent)))

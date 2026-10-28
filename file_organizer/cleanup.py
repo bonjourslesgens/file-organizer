@@ -46,7 +46,7 @@ class Cleanup:
         root=snapshot.get('root',{})
         roots=self.config.snapshot()['android_roots' if kind=='android' else 'roots']
         current=next((r for r in roots if r['id']==root.get('id') and r['path']==root.get('path')),None)
-        if not current or not current.get('cleanup_allowed',False):
+        if not current or current.get('cleanup_allowed',False) is not True:
             raise SafetyError('Le dossier n’est pas déclaré personnel et autonome pour le nettoyage.')
         if snapshot.get('detected_by')!='signature' or snapshot.get('category') not in ('images','videos','audio','documents'):
             raise SafetyError('Type ambigu ou estimé par extension : retrait exclu.')

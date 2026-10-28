@@ -1,6 +1,9 @@
 name: Tests et distribution Windows 11
 on:
   push:
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
   pull_request:
   workflow_dispatch:
 permissions:

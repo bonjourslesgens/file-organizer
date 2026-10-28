@@ -61,6 +61,9 @@ class Config:
                 raise ValueError('Dossier autorisé incomplet.')
         if len({r['id'] for r in data['roots']}) != len(data['roots']):
             raise ValueError('Identifiants de dossiers en double.')
+        for root in data['roots']+data.get('android_roots',[]):
+            if isinstance(root,dict) and 'cleanup_allowed' in root and type(root['cleanup_allowed']) is not bool:
+                raise ValueError('Autorisation de nettoyage : booléen true/false requis.')
         patterns=data.get('sensitive_patterns',[])
         if not isinstance(patterns,list) or len(patterns)>100 or any(not isinstance(p,str) or not p.strip() or len(p)>160 for p in patterns):
             raise ValueError('Liste d’exclusions sensibles invalide.')

@@ -184,3 +184,9 @@ class CleanupTests(Fixture):
             self.app.cleanup.thread.join(timeout=10)
         fresh=Cleanup(self.app.config,self.app.db,self.app.transfers,self.bin)
         self.assertEqual(fresh.get(result['id'])['status'],'interrupted');self.assertTrue(source.exists())
+
+    def test_text_false_cannot_be_interpreted_as_cleanup_consent(self):
+        source,copy=self.copy();self.app.config.data['roots'][0]['cleanup_allowed']='false'
+        self.assertFalse(self.app.cleanup.candidates(copy['id'])['items'])
+        with self.assertRaises(ValueError):self.app.config.validate(self.app.config.snapshot())
+        self.assertTrue(source.exists());self.assertFalse(self.bin.calls)

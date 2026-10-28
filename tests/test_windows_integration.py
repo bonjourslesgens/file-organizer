@@ -95,3 +95,13 @@ class WindowsIntegrationTests(Fixture):
         candidates=self.app.cleanup.candidates(copy['id'])
         self.assertEqual(len(candidates['items']),1,candidates)
         self.assertEqual(source.read_bytes(),PNG)
+
+    def test_native_recycle_veto_restores_exact_source_without_deletion(self):
+        from unittest.mock import patch
+        source,copy=self.copy()
+        proposal=self.app.cleanup.prepare(copy['id'],[copy['items'][0]['file_id']])
+        with patch('file_organizer.win_recycle.require_recycle_flag',side_effect=SafetyError('Permanent deletion vetoed by integration test')):
+            job=self.app.cleanup.start(proposal['review_id'],'NETTOYER',True);self.app.cleanup.thread.join(timeout=90)
+        result=self.app.cleanup.get(job['id']);self.assertEqual(result['status'],'blocked',result)
+        self.assertEqual(source.read_bytes(),PNG)
+        self.assertEqual(Path(copy['items'][0]['destination']).read_bytes(),PNG)
