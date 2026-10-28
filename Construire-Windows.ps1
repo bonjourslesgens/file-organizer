@@ -4,7 +4,7 @@ Set-Location $PSScriptRoot
 python -m venv .venv-build
 if ($LASTEXITCODE -ne 0) { throw 'Python 3.11+ est requis pour la construction seulement.' }
 $python = Join-Path $PSScriptRoot '.venv-build\Scripts\python.exe'
-& $python -m pip install 'pyinstaller==6.16.0'
+& $python -m pip install . 'pyinstaller==6.16.0'
 if ($LASTEXITCODE -ne 0) { throw 'Installation de PyInstaller impossible.' }
 & $python -m unittest discover -v
 if ($LASTEXITCODE -ne 0) { throw 'Les tests ont echoue. Aucun executable ne sera construit.' }

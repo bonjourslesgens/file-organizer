@@ -298,7 +298,10 @@ class Transfers:
             if not row:raise ValueError('Transfert introuvable.')
             stats=dict(c.execute("SELECT count(*) AS count,coalesce(sum(size),0) AS bytes,coalesce(sum(bytes_done),0) AS bytes_done,coalesce(sum(status IN ('verified','already_present')),0) AS verified FROM transfer_items WHERE job_id=?",(job_id,)).fetchone())
             items=[dict(r) for r in c.execute('SELECT file_id,source,destination,size,status,bytes_done,message FROM transfer_items WHERE job_id=? ORDER BY file_id LIMIT ? OFFSET ?',(job_id,limit,offset))]
-        return dict(row)|stats|{'items':items,'mode':'copy','originals_preserved':True}
+        with self.db.connect() as c:
+            exists=c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cleanup_actions'").fetchone()
+            cleaned=c.execute("SELECT count(DISTINCT file_id) FROM cleanup_actions WHERE transfer_job_id=? AND status IN ('recycled','manual_removed')",(job_id,)).fetchone()[0] if exists else 0
+        return dict(row)|stats|{'items':items,'mode':'copy','originals_preserved':not cleaned,'cleanup_count':cleaned}
 
     def list(self):
         with self.db.connect() as c:

@@ -138,3 +138,14 @@ class Config:
                 raise ValueError('Paramètre inconnu.')
             data=self.snapshot();data.update(values);self.validate(data)
             self.data=data;self.save()
+
+    def allow_cleanup(self,root_id,enabled,kind='local'):
+        if type(enabled) is not bool or kind not in ('local','android'):
+            raise ValueError('Autorisation de nettoyage invalide.')
+        with self.lock:
+            roots=self.data['roots' if kind=='local' else 'android_roots']
+            entry=next((r for r in roots if r['id']==root_id),None)
+            if entry is None:raise ValueError('Dossier non autorisé.')
+            entry['cleanup_allowed']=enabled
+            self.save()
+            return entry

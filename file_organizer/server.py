@@ -19,6 +19,7 @@ from .storage import Storage
 from .transfers import Transfers
 from .android import Android, PUBLIC_ROOTS
 from .automation import Automation
+from .cleanup import Cleanup
 from . import __version__
 import threading
 
@@ -36,14 +37,16 @@ class Application:
         self.storage = Storage(self.config.state_dir)
         self.android = Android(self.config, self.db)
         self.transfers = Transfers(self.config, self.db, self.storage, self.android)
+        self.cleanup = Cleanup(self.config,self.db,self.transfers)
         self.automation = Automation(self)
 
     def busy(self, ignore_automation=False):
-        return bool((self.scanner.thread and self.scanner.thread.is_alive()) or self.transfers.busy() or self.android.busy() or
+        return bool((self.scanner.thread and self.scanner.thread.is_alive()) or self.transfers.busy() or self.cleanup.busy() or self.android.busy() or
                     (not ignore_automation and self.automation.worker and self.automation.worker.is_alive()))
 
     def close(self):
         self.automation.stop.set()
+        self.cleanup.close()
         self.scanner.cancel(); self.transfers.pause(); self.android.stop.set()
         self.scanner.wait(10); self.transfers.wait(10)
         if self.android.thread: self.android.thread.join(timeout=5)
@@ -91,7 +94,7 @@ class Application:
 
 def make_server(app: Application, port=8765):
     class Handler(BaseHTTPRequestHandler):
-        server_version = 'FileOrganizer/0.2'
+        server_version = 'FileOrganizer/0.3'
 
         def log_message(self, format, *args):
             pass  # Do not log request credentials or tokens.
@@ -150,10 +153,14 @@ def make_server(app: Application, port=8765):
             limit = min(200, max(1, int(value('limit', '100'))))
             offset = max(0, int(value('offset', '0')))
             if path == '/api/state':
-                return self.reply(200, {'config': app.config.snapshot(), 'roots': app.roots(), 'scan': app.scanner.snapshot(), 'stats': app.db.stats(), 'mode': 'simulation', 'version': __version__, 'transfers': app.transfers.list(), 'automation': app.automation.snapshot(), 'android_scan': dict(app.android.job), 'notifications_count': len(app.db.notifications())})
+                return self.reply(200, {'config': app.config.snapshot(), 'roots': app.roots(), 'scan': app.scanner.snapshot(), 'stats': app.db.stats(), 'mode': 'simulation', 'version': __version__, 'cleanup': app.cleanup.list(), 'transfers': app.transfers.list(), 'automation': app.automation.snapshot(), 'android_scan': dict(app.android.job), 'notifications_count': len(app.db.notifications())})
             if path == '/api/preview':
                 content,mime=app.preview(int(value('id')))
                 return self.reply(200,content,mime)
+            if path == '/api/cleanup/candidates':
+                return self.reply(200,app.cleanup.candidates(value('transfer_id')))
+            if path == '/api/cleanup':
+                return self.reply(200,app.cleanup.get(value('id')))
             if path == '/api/transfers':
                 return self.reply(200, app.transfers.list())
             if path == '/api/transfer':
@@ -215,9 +222,18 @@ def make_server(app: Application, port=8765):
                 # Serialize config mutations with scan starts; freeze roots throughout scans.
                 with app.operation_lock:
                     busy = app.busy()
-                    if busy and path in ('/api/roots/add', '/api/roots/remove', '/api/rules', '/api/simulate', '/api/transfers/prepare', '/api/transfers/start', '/api/transfers/resume', '/api/android/authorize', '/api/android/remove', '/api/android/settings', '/api/android/scan', '/api/android/simulate'):
+                    if busy and path in ('/api/roots/add', '/api/roots/remove', '/api/rules', '/api/simulate', '/api/transfers/prepare', '/api/transfers/start', '/api/transfers/resume', '/api/android/authorize', '/api/android/remove', '/api/android/settings', '/api/android/scan', '/api/android/simulate', '/api/cleanup/prepare', '/api/cleanup/start', '/api/cleanup/manual', '/api/cleanup/permission', '/api/setup/apply'):
                         return self.reply(409, {'error': 'Une opération est en cours. Attendez sa fin ou mettez-la en pause.'})
-                    if path == '/api/storage/diagnose':
+                    if path == '/api/cleanup/permission':
+                        result=app.config.allow_cleanup(body['root_id'],body['enabled'],body.get('kind','local'))
+                        app.db.event('cleanup_permission_changed','Propositions de nettoyage '+('autorisées' if body['enabled'] else 'désactivées')+' : '+result['path'])
+                    elif path == '/api/cleanup/prepare':
+                        result=app.cleanup.prepare(body['transfer_id'],body['file_ids'])
+                    elif path == '/api/cleanup/start':
+                        result=app.cleanup.start(body['review_id'],body.get('confirmation',''),body.get('acknowledge_single_copy',False))
+                    elif path == '/api/cleanup/manual':
+                        result=app.cleanup.confirm_manual(body['id'],body.get('confirmation',''))
+                    elif path == '/api/storage/diagnose':
                         result = app.storage.diagnose(body['path'])
                         app.db.event('storage_diagnosed', 'Diagnostic non destructif : '+str(body['path']) + (' : accessible' if result['safe_to_write'] else ' : écritures bloquées'), 'info' if result['safe_to_write'] else 'warning')
                     elif path == '/api/transfers/prepare':

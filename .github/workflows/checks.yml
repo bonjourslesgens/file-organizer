@@ -17,6 +17,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - run: python -m pip install .
+      - run: python -m tests.windows_probe
       - run: python -m tests.ci_runner
       - uses: actions/upload-artifact@v4
         if: always()
@@ -50,7 +52,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Verification apres reinstallation echouee' }
       - uses: actions/upload-artifact@v4
         with:
-          name: FileOrganizer-0.2-Windows-x64
+          name: FileOrganizer-0.3-Windows-x64
           path: |
             dist/FileOrganizer.exe
             dist/FileOrganizer-Setup-*-Windows-x64.exe

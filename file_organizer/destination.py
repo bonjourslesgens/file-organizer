@@ -10,7 +10,7 @@ from .safety import SafetyError, check_components, is_link
 
 
 @contextmanager
-def directory(base, relative):
+def directory(base, relative, create=True):
     if relative.is_absolute() or '..' in relative.parts:
         raise SafetyError('Destination hors du dossier approuvé.')
     held, handles = [], []
@@ -22,10 +22,11 @@ def directory(base, relative):
                 fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
                 held.append(fd)
             for part in relative.parts:
-                try:
-                    os.mkdir(part, mode=0o700, dir_fd=fd)
-                except FileExistsError:
-                    pass
+                if create:
+                    try:
+                        os.mkdir(part, mode=0o700, dir_fd=fd)
+                    except FileExistsError:
+                        pass
                 fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
                 held.append(fd)
             yield Folder(base / relative, fd)
@@ -39,7 +40,7 @@ def directory(base, relative):
             path = Path(base.anchor)
             for i, part in enumerate((*base.parts[1:], *relative.parts)):
                 path = path / part
-                if i >= len(base.parts)-1:
+                if create and i >= len(base.parts)-1:
                     try:
                         path.mkdir()
                     except FileExistsError:

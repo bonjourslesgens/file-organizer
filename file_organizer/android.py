@@ -253,3 +253,18 @@ class Android:
             c.execute('INSERT INTO plans VALUES(?,?,?,?,?)',(plan_id,now,str(base),count,total))
         self.db.event('android_simulated',f'{count} médias Android proposés ; aucun transfert.')
         return {'id':plan_id,'count':count,'bytes':total,'mode':'simulation','destination_verified':False}
+
+    def source_present(self,snapshot):
+        """Read-only per-file check; never treats a transport/permission failure as deletion."""
+        entry=snapshot['root'];path=validate_path(snapshot['path']);root=validate_path(entry['path'])
+        current=next((r for r in self.config.snapshot()['android_roots'] if r['id']==entry['id'] and r['serial']==entry['serial'] and r['path']==entry['path']),None)
+        if not current or not current.get('cleanup_allowed'):
+            raise SafetyError('Autorisation de nettoyage Android absente.')
+        canonical_root=self.shell(entry['serial'],'readlink -f '+shlex.quote(str(root)))
+        actual_parent=self.shell(entry['serial'],'readlink -f '+shlex.quote(str(path.parent)))
+        if actual_parent!=str(PurePosixPath(canonical_root)/path.parent.relative_to(root)):
+            raise SafetyError('Android : parent absent ou redirigé ; retrait impossible à confirmer.')
+        quoted=shlex.quote(str(path));parent=shlex.quote(str(path.parent))
+        answer=self.shell(entry['serial'],f'if [ -e {quoted} ] || [ -L {quoted} ]; then printf PRESENT; elif [ -r {parent} ] && [ -x {parent} ]; then printf ABSENT; else printf INACCESSIBLE; fi')
+        if answer not in ('PRESENT','ABSENT'):raise SafetyError('Android : état du fichier inaccessible ou ambigu.')
+        return answer=='PRESENT'

@@ -60,7 +60,7 @@ def windows_volume(path):
         raise SafetyError('Seuls les volumes locaux fixes ou amovibles sont acceptés.')
     return {'mount':volume_path.value, 'source':guid.value, 'filesystem':fs.value.lower(),
             'label':label.value, 'serial':str(serial.value), 'read_only':bool(flags.value & 0x80000),
-            'mount_id':guid.value, 'volume_uuid':guid.value + ':' + str(serial.value)}
+            'drive_type':drive_type, 'mount_id':guid.value, 'volume_uuid':guid.value + ':' + str(serial.value)}
 
 
 class Storage:
