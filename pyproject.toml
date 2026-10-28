@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "file-organizer-local"
 version = "0.3.0"
-description = "Inventaire personnel local et simulation d’archivage, sans suppression"
+description = "Inventaire personnel, archivage vérifié et nettoyage après confirmation"
 requires-python = ">=3.11"
 dependencies = ["pywin32==311; sys_platform == 'win32'"]
 

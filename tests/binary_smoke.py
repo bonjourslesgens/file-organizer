@@ -24,6 +24,19 @@ def main():
         run_env['PATH']=';'.join((str(system/'System32'),str(system),str(system/'System32'/'WindowsPowerShell'/'v1.0')))
         run_env.pop('PYTHONPATH',None)
         run_env.pop('PYTHONHOME',None)
+    def stop(process):
+        if process.poll() is not None:
+            return
+        if os.name=='nt' and not args.source:
+            # A one-file PyInstaller executable has a bootloader parent and an
+            # application child. Terminating only the parent leaves a live
+            # child holding the index lock, and would not test a real restart.
+            result=subprocess.run([str(system/'System32'/'taskkill.exe'),'/PID',str(process.pid),'/T','/F'],capture_output=True,timeout=20)
+            if result.returncode and process.poll() is None:
+                raise AssertionError(result.stderr.decode('utf-8','replace'))
+        else:
+            process.terminate()
+        process.wait(timeout=15)
     command=[sys.executable,'-m','file_organizer'] if args.source else [str(args.exe.resolve())]
     with tempfile.TemporaryDirectory(prefix='FileOrganizer-Binary-',dir=Path.home() if os.name=='nt' else None) as tmp:
         base=Path(tmp);source=base/'personal';source.mkdir();dest=base/'archives';dest.mkdir()
@@ -42,7 +55,7 @@ def main():
                     except (OSError,urllib.error.URLError):time.sleep(.2)
                 raise AssertionError('Application non prete')
             except BaseException:
-                process.terminate();process.wait(timeout=10);raise
+                stop(process);raise
         process,token=start()
         def api(path,body=None):
             req=urllib.request.Request(url+path,headers={'X-Organizer-Token':token,'Content-Type':'application/json'},data=json.dumps(body).encode() if body is not None else None)
@@ -86,14 +99,15 @@ def main():
             # A second process must not mutate recovery state of a running transfer/index.
             second=subprocess.run(command+['--no-browser','--data-dir',str(base/'state')],capture_output=True,timeout=30)
             assert second.returncode!=0
-            process.terminate();process.wait(timeout=15)
+            stop(process)
+            process.stderr.close()
             process,token=start()
             restored=api('/api/state')
             assert restored['stats']['files']==(0 if recycled else 1) and len(restored['config']['roots'])==1
             assert restored['transfers'][0]['status']=='completed'
-            print('PASS distribution : inventaire, copie SHA-256, source preservee, proposition de nettoyage sans retrait, instance unique, index et parametres conserves apres redemarrage.')
+            print('PASS distribution : inventaire, copie SHA-256, nettoyage controle, instance unique, index et parametres conserves apres redemarrage reel.')
         finally:
-            if process.poll() is None:process.terminate();process.wait(timeout=15)
+            stop(process)
             process.stderr.close()
 
 

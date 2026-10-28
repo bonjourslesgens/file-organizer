@@ -15,6 +15,7 @@
     "*.p12"
   ],
   "onboarding_completed": false,
+  "archive_destination": "",
   "automation": {
     "enabled": false,
     "interval_seconds": 300,
