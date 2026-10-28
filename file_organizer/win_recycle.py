@@ -108,14 +108,16 @@ class WindowsRecycleBin:
     def _shell_recycle(self,path,guard):
         import pythoncom
         from win32com.shell import shell, shellcon
-        from win32com.server.util import wrap
+        from win32com.server.policy import DesignatedWrapPolicy
         from win32com.server.exception import COMException
-        class Sink:
+        class Sink(DesignatedWrapPolicy):
             _com_interfaces_=[shell.IID_IFileOperationProgressSink]
             _public_methods_=['StartOperations','FinishOperations','PreRenameItem','PostRenameItem','PreMoveItem','PostMoveItem',
                               'PreCopyItem','PostCopyItem','PreDeleteItem','PostDeleteItem','PreNewItem','PostNewItem',
                               'UpdateProgress','ResetTimer','PauseTimer','ResumeTimer']
-            def __init__(self):self.receipt=None;self.error=None
+            def __init__(self):
+                self.receipt=None;self.error=None
+                self._wrap_(self)
             def PreDeleteItem(self,flags,item):
                 try:require_recycle_flag(flags);guard()
                 except Exception as e:
@@ -144,7 +146,8 @@ class WindowsRecycleBin:
             operation.SetOperationFlags(flags)
             phase='création de l’élément Shell vérifié'
             item=shell.SHCreateItemFromParsingName(str(path),None,shell.IID_IShellItem)
-            wrapped=wrap(sink,shell.IID_IFileOperationProgressSink)
+            # This IID is SERVER_ONLY in pywin32: util.wrap().QueryInterface needs a nonexistent client wrapper.
+            wrapped=pythoncom.WrapObject(sink,shell.IID_IFileOperationProgressSink)
             operation.DeleteItem(item,wrapped)
             phase='exécution du recyclage Windows'
             result=operation.PerformOperations();aborted=operation.GetAnyOperationsAborted()
