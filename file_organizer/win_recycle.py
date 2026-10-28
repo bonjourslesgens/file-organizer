@@ -55,12 +55,26 @@ class WindowsRecycleBin:
                     if is_link(st) or st.st_nlink!=1 or identity(st)!=identity(before) or digest(source)!=snapshot['sha256']:
                         raise SafetyError('Source modifiée ou utilisée : aucun nettoyage.')
                     archive_guard()
-                    encoded=str(folder.path/stage).encode('utf-16-le')
-                    buf=ctypes.create_string_buffer(RenameInfo.FileName.offset+len(encoded))
-                    info=RenameInfo.from_buffer(buf);info.ReplaceIfExists=False;info.RootDirectory=None;info.FileNameLength=len(encoded)
-                    ctypes.memmove(ctypes.addressof(buf)+RenameInfo.FileName.offset,encoded,len(encoded))
-                    if not k.SetFileInformationByHandle(msvcrt.get_osfhandle(source.fileno()),3,buf,len(buf)):
+                    def rename_to(target):
+                        encoded=str(target).encode('utf-16-le')
+                        # FILE_RENAME_INFO expects a terminated WCHAR string as well as its byte length.
+                        buf=ctypes.create_string_buffer(RenameInfo.FileName.offset+len(encoded)+2)
+                        info=RenameInfo.from_buffer(buf);info.ReplaceIfExists=False;info.RootDirectory=None;info.FileNameLength=len(encoded)
+                        ctypes.memmove(ctypes.addressof(buf)+RenameInfo.FileName.offset,encoded,len(encoded))
+                        if not k.SetFileInformationByHandle(msvcrt.get_osfhandle(source.fileno()),3,buf,len(buf)):
+                            raise ctypes.WinError(ctypes.get_last_error())
+                    rename_to(folder.path/stage)
+                    k.GetFinalPathNameByHandleW.argtypes=[w.HANDLE,w.LPWSTR,w.DWORD,w.DWORD]
+                    actual_buffer=ctypes.create_unicode_buffer(32768)
+                    if not k.GetFinalPathNameByHandleW(msvcrt.get_osfhandle(source.fileno()),actual_buffer,len(actual_buffer),0):
+                        rename_to(path)
                         raise ctypes.WinError(ctypes.get_last_error())
+                    actual=actual_buffer.value
+                    if actual.startswith('\\\\?\\'):actual=actual[4:]
+                    if os.path.normcase(actual)!=os.path.normcase(str(folder.path/stage)):
+                        try:rename_to(path)
+                        except Exception as e:raise RecoveryRequired('Renommage natif inattendu ; fichier conservé sous '+actual,actual) from e
+                        raise SafetyError('Windows a renvoyé un chemin de retrait inattendu ; original remis en place.')
                     staged=True
                     source_inode=str(st.st_ino)
                 def before_recycle():
@@ -70,6 +84,7 @@ class WindowsRecycleBin:
                         if str(st.st_ino)!=source_inode or st.st_size!=snapshot['size'] or digest(current)!=snapshot['sha256']:
                             raise SafetyError('Fichier de retrait remplacé ou modifié ; opération annulée.')
                     archive_guard()
+                before_recycle()
                 receipt=self._shell_recycle(folder.path/stage,before_recycle)
                 return receipt|{'original_path':str(path),'staged_name':stage,'at':time.time(),
                                 'restoration_note':'Dans la Corbeille, restaurer cette entrée puis lui redonner le nom original indiqué au journal.'}
@@ -115,18 +130,23 @@ class WindowsRecycleBin:
                 raise AttributeError(name)
         pythoncom.CoInitialize()
         operation=None;item=None;wrapped=None;sink=Sink()
+        phase='création de l’opération Shell'
         try:
             operation=pythoncom.CoCreateInstance(shell.CLSID_FileOperation,None,pythoncom.CLSCTX_ALL,shell.IID_IFileOperation)
             # No fallback to permanent deletion: PreDeleteItem raises E_ABORT, rather than returning an ignored code.
             flags=shellcon.FOF_NOCONFIRMATION|shellcon.FOF_NOERRORUI|shellcon.FOF_SILENT|shellcon.FOFX_EARLYFAILURE|0x20000000|0x00080000
             operation.SetOperationFlags(flags)
+            phase='création de l’élément Shell vérifié'
             item=shell.SHCreateItemFromParsingName(str(path),None,shell.IID_IShellItem)
             wrapped=wrap(sink,shell.IID_IFileOperationProgressSink)
             operation.DeleteItem(item,wrapped)
+            phase='exécution du recyclage Windows'
             result=operation.PerformOperations();aborted=operation.GetAnyOperationsAborted()
             if sink.error or aborted or result or not sink.receipt:
                 raise SafetyError(sink.error or 'Recyclage Windows annulé ou non confirmé.')
             return sink.receipt
+        except Exception as e:
+            raise SafetyError(phase+' : '+str(e)) from e
         finally:
             wrapped=None;item=None;operation=None
             pythoncom.CoUninitialize()
