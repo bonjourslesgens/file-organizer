@@ -101,9 +101,15 @@ class WindowsRecycleBin:
                     self.error=str(e)
                     raise COMException(desc=str(e),scode=-2147467260)
             def PostDeleteItem(self,flags,item,result,newly_created):
-                if result<0 or newly_created is None:
+                if result & 0x80000000 or newly_created is None:
                     self.error='Windows n’a pas confirmé une entrée de Corbeille.'
-                else:self.receipt={'method':'windows_recycle_bin','recycled_path':newly_created.GetDisplayName(0x80058000)}
+                else:
+                    # A recycled Shell item is sometimes virtual: FILESYSPATH can fail after a successful move.
+                    # Non-null psiNewlyCreated is the native receipt; display-name failure must not lose it.
+                    self.receipt={'method':'windows_recycle_bin','shell_item_confirmed':True,'recycled_path':'','display_name':path.name}
+                    for flag,key in ((0x80058000,'recycled_path'),(0x80028000,'shell_parsing_name'),(0,'display_name')):
+                        try:self.receipt[key]=newly_created.GetDisplayName(flag)
+                        except Exception:pass
             def __getattr__(self,name):
                 if name in self._public_methods_:return lambda *args:None
                 raise AttributeError(name)

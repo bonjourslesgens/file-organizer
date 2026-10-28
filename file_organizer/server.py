@@ -248,7 +248,7 @@ def make_server(app: Application, port=8765):
                     elif path == '/api/cleanup/manual':
                         result=app.cleanup.confirm_manual(body['id'],body.get('confirmation',''))
                     elif path == '/api/storage/diagnose':
-                        result = app.storage.diagnose(body['path'])
+                        result = app.storage.diagnose(body['path'],refresh=True)
                         app.db.event('storage_diagnosed', 'Diagnostic non destructif : '+str(body['path']) + (' : accessible' if result['safe_to_write'] else ' : écritures bloquées'), 'info' if result['safe_to_write'] else 'warning')
                     elif path == '/api/transfers/prepare':
                         result = app.transfers.prepare(body['plan_id'], body.get('file_ids'), body.get('all_files',False))

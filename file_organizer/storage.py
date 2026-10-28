@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import time
+import threading
 
 from .paths import native_path,display_path
 from .safety import SafetyError, validate_root, check_components
@@ -68,8 +69,10 @@ def windows_volume(path):
 class Storage:
     def __init__(self, state_dir):
         self.state_dir = state_dir
+        self._health_cache = {}
+        self._health_lock = threading.Lock()
 
-    def diagnose(self, raw):
+    def diagnose(self, raw, refresh=False):
         result = {'path':str(raw), 'checked_at':time.time(), 'safe_to_write':False, 'anomalies':[],
                   'health':'non mesurée', 'model':'non disponible', 'non_destructive':True}
         try:
@@ -92,10 +95,18 @@ class Storage:
                 # Required Windows health evidence; fail closed if unavailable.
                 letter = result['mount'][0]
                 script = f"$ErrorActionPreference='Stop'; $v=Get-Volume -DriveLetter '{letter}'; $p=Get-Partition -DriveLetter '{letter}'; $d=$p | Get-Disk; [pscustomobject]@{{Model=$d.FriendlyName;DiskNumber=$d.Number;DiskSize=$d.Size;Health=[string]$d.HealthStatus;VolumeHealth=[string]$v.HealthStatus;Offline=$d.IsOffline;ReadOnly=$d.IsReadOnly;Operational=([string]::Join(',', $d.OperationalStatus))}} | ConvertTo-Json -Compress"
-                proc = subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',script],capture_output=True,text=True,timeout=15)
-                if proc.returncode:
-                    raise SafetyError('État du disque Windows non vérifiable ; copie bloquée.')
-                info = json.loads(proc.stdout.lstrip('\ufeff'))
+                with self._health_lock:
+                    cached=self._health_cache.get(result['volume_uuid'])
+                    if cached and not refresh and time.monotonic()-cached[0]<5:
+                        info=cached[1]
+                    else:
+                        proc = subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',script],capture_output=True,text=True,timeout=15)
+                        if proc.returncode:
+                            raise SafetyError('État du disque Windows non vérifiable ; copie bloquée.')
+                        info=json.loads(proc.stdout.lstrip('\ufeff'))
+                        info['sampled_at']=time.time()
+                        self._health_cache[result['volume_uuid']]=(time.monotonic(),info)
+                result['health_sampled_at']=info['sampled_at']
                 result.update(model=info['Model'], health=info['Health'], disk_number=info['DiskNumber'], disk_capacity=info['DiskSize'])
                 if info['Health'] != 'Healthy' or info['VolumeHealth'] != 'Healthy' or info['Offline'] or info['ReadOnly'] or info['Operational'] != 'Online':
                     result['anomalies'].append('Le disque ou le volume Windows n’est pas sain, en ligne et inscriptible.')

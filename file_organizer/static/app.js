@@ -32,7 +32,7 @@ async function api(path,body){
   const r=await fetch(path,{method:body===undefined?'GET':'POST',headers:{'X-Organizer-Token':token,...(body===undefined?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:JSON.stringify(body)});
   const data=await r.json();if(!r.ok)throw new Error(data.error||'Requête impossible.');return data;
 }
-async function refreshState(){state=await api('/api/state');$('#nav-count').textContent=fmt.format(state.stats.files);$('#notification-count').textContent=state.notifications_count||0;const copying=state.transfers.some(j=>j.status==='running');$('#current-mode').textContent=copying?'Copie réelle en cours':'Simulation par défaut';$('.mode-pill').classList.toggle('copy-active',copying);updateScan();}
+async function refreshState(){state=await api('/api/state');$('#nav-count').textContent=fmt.format(state.stats.files);$('#notification-count').textContent=state.notifications_count||0;const copying=state.transfers.some(j=>j.status==='running');const retiring=state.cleanup.some(j=>j.status==='running');$('#current-mode').textContent=retiring?'Retrait confirmé en cours':copying?'Copie réelle en cours':'Simulation par défaut';$('.mode-pill').classList.toggle('copy-active',copying||retiring);updateScan();}
 function updateScan(){
  const job=state.scan;const busy=job.status==='running'||job.status==='cancelling';
  $('#start-scan').disabled=busy||state.transfers.some(j=>j.status==='running')||state.android_scan.status==='running'||state.cleanup.some(j=>j.status==='running');const box=$('#scan-status');box.hidden=job.status==='idle';

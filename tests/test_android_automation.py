@@ -28,6 +28,7 @@ class FakeAndroid(Android):
         if args[0]=='devices':return b'List of devices attached\nSYNTHETIC device usb:1 model:Oukitel_Test\n'
         command=shlex.split(args[-1]);path=command[-1]
         if command[0]=='test':return b'OK'
+        if command[0]=='if':return b'PRESENT' if command[3] in self.contents else b'ABSENT'
         if command[0]=='find':return b''.join(p.encode()+b'\0' for p in self.contents)
         if command[0]=='readlink':return self.redirects.get(path,path).encode()
         if command[0]=='for':return b'BLOCKED' if any(p in args[-1] for p in self.private) else b''
@@ -134,6 +135,34 @@ class AndroidTests(Fixture):
         connector=Android(self.app.config,self.app.db)
         with patch('file_organizer.android.shutil.which',return_value=None),self.assertRaisesRegex(SafetyError,'ADB absent'):
             connector.devices()
+
+    def test_android_cleanup_is_manual_and_transport_errors_never_mean_absence(self):
+        self.scan_phone();dest=self.base/'archives';dest.mkdir()
+        self.app.config.allow_cleanup(self.entry_android['id'],True,'android')
+        plan=self.phone.simulate(self.entry_android['id'],str(dest))
+        approval=self.app.transfers.prepare(plan['id'],all_files=True)
+        native=subprocess.Popen
+        def fake_popen(args,**kw):
+            if args[0]!='FAKE_ADB':return native(args,**kw)
+            path=shlex.split(args[-1])[-1]
+            return native([sys.executable,'-c','import sys;sys.stdout.buffer.write(bytes.fromhex(sys.argv[1]))',self.phone.contents[path].hex()],**kw)
+        with patch('file_organizer.android.subprocess.Popen',side_effect=fake_popen):
+            copied=self.app.transfers.start(approval['approval_id'],'COPIER');self.app.transfers.wait()
+            report=self.app.cleanup.candidates(copied['id'])
+            self.assertEqual(len(report['items']),2)
+            self.assertTrue(all(i['method']=='manual_android' for i in report['items']))
+            review=self.app.cleanup.prepare(copied['id'],[report['items'][0]['file_id']])
+            result=self.app.cleanup.start(review['review_id'],'NETTOYER',True);self.app.cleanup.thread.join(timeout=10)
+        job=self.app.cleanup.get(result['id']);self.assertEqual(job['status'],'manual_required')
+        action=job['items'][0];self.assertIn(action['source'],self.phone.contents)
+        self.phone.available=False
+        with self.assertRaises(OSError):self.app.cleanup.confirm_manual(job['id'],'RETRAIT EFFECTUÉ')
+        self.phone.available=True;self.phone.contents.pop(action['source'])  # User-controlled action, not an ADB command.
+        finished=self.app.cleanup.confirm_manual(job['id'],'RETRAIT EFFECTUÉ')
+        self.assertEqual(finished['status'],'completed');self.assertTrue(Path(action['destination']).exists())
+        for args in self.phone.commands:
+            command=shlex.split(args[-1])
+            self.assertTrue(not command or command[0] not in ('rm','rmdir','unlink','mv','push'))
 
 
 class AutomationTests(Fixture):

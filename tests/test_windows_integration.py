@@ -54,7 +54,8 @@ class WindowsIntegrationTests(Fixture):
         token=win32security.OpenProcessToken(win32api.GetCurrentProcess(),win32security.TOKEN_QUERY)
         sid=win32security.GetTokenInformation(token,win32security.TokenUser)[0];token.Close()
         denied=win32security.ACL();denied.AddAccessDeniedAceEx(win32security.ACL_REVISION,0,ntsecuritycon.FILE_READ_DATA,sid)
-        for i in range(original.GetAceCount()):denied.AddAce(win32security.ACL_REVISION,denied.GetAceCount(),original.GetAce(i))
+        denied.AddAccessAllowedAceEx(win32security.ACL_REVISION,0,ntsecuritycon.FILE_ALL_ACCESS,sid)
+        denied.AddAccessAllowedAceEx(win32security.ACL_REVISION,0,ntsecuritycon.FILE_ALL_ACCESS,win32security.CreateWellKnownSid(win32security.WinLocalSystemSid,None))
         restricted=win32security.SECURITY_DESCRIPTOR();restricted.SetSecurityDescriptorDacl(1,denied,0)
         try:
             win32security.SetFileSecurity(str(path),win32security.DACL_SECURITY_INFORMATION,restricted)
@@ -70,20 +71,22 @@ class WindowsIntegrationTests(Fixture):
         result=self.app.cleanup.get(job['id']);self.assertEqual(result['status'],'completed',result)
         self.assertFalse(source.exists());self.assertEqual(Path(copy['items'][0]['destination']).read_bytes(),PNG)
         import json
-        receipt=json.loads(result['items'][0]['receipt']);recycled=Path(receipt['recycled_path'])
-        self.assertEqual(receipt['method'],'windows_recycle_bin');self.assertEqual(recycled.read_bytes(),PNG)
-        # Restore only this synthetic byte stream, without ever emptying the user's Recycle Bin.
+        receipt=json.loads(result['items'][0]['receipt'])
+        self.assertEqual(receipt['method'],'windows_recycle_bin');self.assertTrue(receipt['shell_item_confirmed'])
+        if receipt['recycled_path']:
+            self.assertEqual(Path(receipt['recycled_path']).read_bytes(),PNG)
+        # Restore only this unique synthetic entry; never empty the user's Recycle Bin.
         restored=source.parent/receipt['staged_name']
-        from win32com.shell import shell
-        desktop=__import__('win32com.client',fromlist=['Dispatch']).Dispatch('Shell.Application')
-        item=desktop.NameSpace(10).ParseName(recycled.name)
-        if item:
-            item.InvokeVerb('undelete')
-            import time
-            for _ in range(50):
-                if restored.exists():break
-                time.sleep(.1)
-            if restored.exists():restored.rename(source)
+        import win32com.client,time
+        namespace=win32com.client.Dispatch('Shell.Application').NameSpace(10)
+        entry=next((item for item in namespace.Items() if receipt['staged_name'][:40] in item.Name),None)
+        self.assertIsNotNone(entry,receipt)
+        entry.InvokeVerb('undelete')
+        for _ in range(100):
+            if restored.exists():break
+            time.sleep(.1)
+        self.assertTrue(restored.exists(),'Restauration Windows de la donnée synthétique non confirmée')
+        self.assertEqual(restored.read_bytes(),PNG);restored.rename(source)
 
     def test_long_source_path_can_be_copied_and_reviewed_for_cleanup(self):
         name='/'.join('album-'+str(i)+'x'*45 for i in range(5))+'/été-photo.png'
