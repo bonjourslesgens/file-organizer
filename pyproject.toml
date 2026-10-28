@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "file-organizer-local"
+version = "0.2.0"
+description = "Inventaire personnel local et simulation d’archivage, sans suppression"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+file-organizer = "file_organizer.__main__:main"
+
+[tool.setuptools.package-data]
+file_organizer = ["static/*"]
+
+[tool.setuptools.packages.find]
+include = ["file_organizer*"]

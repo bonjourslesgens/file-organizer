@@ -1,0 +1,52 @@
+name: Tests et distribution Windows 11
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -v
+  windows-distribution:
+    needs: tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Executable autonome, tests du binaire et installateur Inno Setup
+        shell: pwsh
+        run: ./Construire-Windows.ps1 -Installer
+      - name: Installation silencieuse puis verification de l application installee
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist/FileOrganizer-Setup-*-Windows-x64.exe | Select-Object -First 1
+          $installPath = Join-Path $env:LOCALAPPDATA 'Programs\FileOrganizer'
+          $p = Start-Process -FilePath $setup.FullName -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw 'Installation echouee' }
+          python -m tests.binary_smoke --exe (Join-Path $installPath 'FileOrganizer.exe')
+          if ($LASTEXITCODE -ne 0) { throw 'Verification apres installation echouee' }
+          # Rerun the installer to exercise an in-place update of the application files.
+          $p = Start-Process -FilePath $setup.FullName -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw 'Reinstallation echouee' }
+          python -m tests.binary_smoke --exe (Join-Path $installPath 'FileOrganizer.exe')
+          if ($LASTEXITCODE -ne 0) { throw 'Verification apres reinstallation echouee' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FileOrganizer-0.2-Windows-x64
+          path: |
+            dist/FileOrganizer.exe
+            dist/FileOrganizer-Setup-*-Windows-x64.exe
+            dist/SHA256SUMS.txt
+          if-no-files-found: error

@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "roots": [],
+  "android_roots": [],
+  "adb_path": "",
+  "sensitive_patterns": [
+    "*password*",
+    "*mot-de-passe*",
+    "*secret*",
+    "*recovery*",
+    "*seed*",
+    "*.key",
+    "*.pem",
+    "*.pfx",
+    "*.p12"
+  ],
+  "onboarding_completed": false,
+  "automation": {
+    "enabled": false,
+    "interval_seconds": 300,
+    "destination": ""
+  },
+  "keyword_categories": {
+    "Études": [
+      "cours",
+      "étude",
+      "examen",
+      "mémoire",
+      "université"
+    ],
+    "Projets": [
+      "projet",
+      "rapport"
+    ],
+    "Voile": [
+      "voile",
+      "bateau",
+      "régate",
+      "navigation"
+    ],
+    "Informatique": [
+      "informatique",
+      "ordinateur",
+      "réseau"
+    ],
+    "Documents personnels": [
+      "facture",
+      "contrat",
+      "assurance",
+      "identité"
+    ]
+  },
+  "archive_rules": [
+    {
+      "name": "Vidéos anciennes",
+      "category": "videos",
+      "older_than_days": 183,
+      "enabled": true
+    },
+    {
+      "name": "Photos anciennes",
+      "category": "images",
+      "older_than_days": 365,
+      "enabled": true
+    }
+  ]
+}
