@@ -74,6 +74,43 @@ def validate_root(raw: str, state_dir: Path | None = None) -> Path:
     return path
 
 
+
+def file_stat(path=None,fd=None):
+    """Consistent NTFS ChangeTime: Python 3.12 stat/ fstat disagree about st_ctime."""
+    raw=os.fstat(fd) if fd is not None else Path(path).lstat()
+    if os.name!='nt':return raw
+    import ctypes
+    from ctypes import wintypes as w
+    import msvcrt
+    k=ctypes.WinDLL('kernel32',use_last_error=True)
+    class BasicInfo(ctypes.Structure):
+        _fields_=[('CreationTime',ctypes.c_longlong),('LastAccessTime',ctypes.c_longlong),
+                  ('LastWriteTime',ctypes.c_longlong),('ChangeTime',ctypes.c_longlong),('FileAttributes',w.DWORD)]
+    k.GetFileInformationByHandleEx.argtypes=[w.HANDLE,ctypes.c_int,w.LPVOID,w.DWORD]
+    owned=False
+    if fd is None:
+        k.CreateFileW.argtypes=[w.LPCWSTR,w.DWORD,w.DWORD,w.LPVOID,w.DWORD,w.DWORD,w.HANDLE]
+        k.CreateFileW.restype=w.HANDLE;k.CloseHandle.argtypes=[w.HANDLE]
+        handle=k.CreateFileW('\\\\?\\'+str(Path(path)),0x80,7,None,3,0x02200000,None)
+        if handle==w.HANDLE(-1).value:raise ctypes.WinError(ctypes.get_last_error())
+        owned=True
+    else:handle=msvcrt.get_osfhandle(fd)
+    info=BasicInfo()
+    try:
+        if not k.GetFileInformationByHandleEx(handle,0,ctypes.byref(info),ctypes.sizeof(info)):
+            raise ctypes.WinError(ctypes.get_last_error())
+    finally:
+        if owned:k.CloseHandle(handle)
+    class ConsistentStat:
+        st_ctime_ns=(info.ChangeTime-116444736000000000)*100
+        st_ctime=st_ctime_ns/1_000_000_000
+        st_mtime_ns=(info.LastWriteTime-116444736000000000)*100
+        st_mtime=st_mtime_ns/1_000_000_000
+        st_birthtime=(info.CreationTime-116444736000000000)/10_000_000
+        st_file_attributes=info.FileAttributes
+        def __getattr__(self,name):return getattr(raw,name)
+    return ConsistentStat()
+
 def validate_file(root: Path, path: Path) -> os.stat_result:
     checked_root = validate_root(str(root))
     checked = check_components(path)
@@ -86,7 +123,7 @@ def validate_file(root: Path, path: Path) -> os.stat_result:
             raise SafetyError('Dossier de développement exclu.')
         if folder == checked_root:
             break
-    st = path.lstat()
+    st = file_stat(path=path)
     if not stat.S_ISREG(st.st_mode) or st.st_nlink > 1:
         raise SafetyError('Seuls les fichiers ordinaires sans liens physiques sont autorisés.')
     return st
@@ -142,11 +179,11 @@ def open_personal(root: Path, path: Path):
                 descriptors.append(fd)
             fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
         stream = os.fdopen(fd, 'rb')
-        current = os.fstat(stream.fileno())
+        current = file_stat(fd=stream.fileno())
         if not stat.S_ISREG(current.st_mode) or is_link(current) or current.st_nlink != 1 or identity(current) != identity(before):
             raise SafetyError('Fichier remplacé pendant son ouverture.')
         yield stream, current
-        if identity(os.fstat(stream.fileno())) != identity(current) or identity(validate_file(root, path)) != identity(current):
+        if identity(file_stat(fd=stream.fileno())) != identity(current) or identity(validate_file(root, path)) != identity(current):
             raise SafetyError('Fichier modifié pendant la lecture ; résultat écarté.')
     finally:
         if stream is not None:

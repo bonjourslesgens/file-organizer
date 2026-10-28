@@ -6,7 +6,7 @@ import time
 import uuid
 
 from .destination import directory
-from .safety import SafetyError, identity, validate_file, is_link
+from .safety import SafetyError, identity, validate_file, is_link, file_stat
 
 
 class RecoveryRequired(SafetyError):
@@ -51,7 +51,7 @@ class WindowsRecycleBin:
             staged=False
             try:
                 with os.fdopen(fd,'rb') as source:
-                    st=os.fstat(source.fileno())
+                    st=file_stat(fd=source.fileno())
                     if is_link(st) or st.st_nlink!=1 or identity(st)!=identity(before) or digest(source)!=snapshot['sha256']:
                         raise SafetyError('Source modifiée ou utilisée : aucun nettoyage.')
                     archive_guard()
