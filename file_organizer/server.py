@@ -168,7 +168,7 @@ def make_server(app: Application, port=8765):
                     if app.busy():return self.reply(409,{'error':'Attendez la fin de l’opération active avant de revérifier les sources.'})
                     return self.reply(200,app.cleanup.candidates(value('transfer_id')))
             if path == '/api/cleanup':
-                return self.reply(200,app.cleanup.get(value('id')))
+                return self.reply(200,app.cleanup.get(value('id'),limit,offset))
             if path == '/api/transfers':
                 return self.reply(200, app.transfers.list())
             if path == '/api/transfer':

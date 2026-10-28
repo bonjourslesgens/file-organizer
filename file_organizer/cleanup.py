@@ -9,7 +9,7 @@ import time
 import uuid
 
 from .destination import directory
-from .safety import SafetyError, identity, validate_root, check_components
+from .safety import SafetyError, identity, validate_root, check_components, file_stat
 from .win_recycle import WindowsRecycleBin
 
 WARNING='Après retrait, il ne restera qu’un exemplaire connu hors Corbeille, à la destination. Conservez une sauvegarde indépendante des fichiers irremplaçables.'
@@ -39,7 +39,7 @@ class Cleanup:
             items=[dict(r) for r in c.execute('SELECT * FROM transfer_items WHERE job_id=? ORDER BY file_id',(transfer_id,))]
         return dict(job),items
 
-    def _opt_in(self,item):
+    def _opt_in(self,item,source_expected=True):
         if item['status'] not in ('verified','already_present'):
             raise SafetyError('Copie non vérifiée ou incomplète.')
         snapshot=json.loads(item['snapshot']);kind=snapshot.get('kind')
@@ -50,6 +50,8 @@ class Cleanup:
             raise SafetyError('Le dossier n’est pas déclaré personnel et autonome pour le nettoyage.')
         if snapshot.get('detected_by')!='signature' or snapshot.get('category') not in ('images','videos','audio','documents'):
             raise SafetyError('Type ambigu ou estimé par extension : retrait exclu.')
+        if source_expected and kind=='local' and os.name=='nt' and getattr(file_stat(path=snapshot['path']),'st_file_attributes',0)&1:
+            raise SafetyError('Source protégée en lecture seule : retrait exclu.')
         if snapshot['category']=='documents' and snapshot.get('mime')!='application/pdf':
             raise SafetyError('Seuls les documents PDF reconnus sont proposés au nettoyage.')
         return snapshot
@@ -152,7 +154,7 @@ class Cleanup:
     def _run(self,cleanup_id):
         status,message='completed','Actions terminées ; archives conservées. La Corbeille ne sera jamais vidée par FileOrganizer.'
         try:
-            actions=self.get(cleanup_id)['items']
+            actions=self._actions(cleanup_id)
             for action in actions:
                 if self.stop.is_set():raise SafetyError('Arrêt demandé : nouvelle vérification requise.')
                 job,items=self._items(action['transfer_job_id']);item=next(i for i in items if i['file_id']==action['file_id'])
@@ -169,7 +171,7 @@ class Cleanup:
             status,message='blocked',str(e)
             if 'action' in locals():
                 # Preserve a successful receipt even if a device fails immediately afterwards.
-                current=next(r for r in self.get(cleanup_id)['items'] if r['id']==action['id'])
+                current=next(r for r in self._actions(cleanup_id) if r['id']==action['id'])
                 if current['status'] not in ('recycled','manual_removed'):
                     self._mark(action['id'],'blocked',str(e),{'recovery_path':getattr(e,'recovery_path',None)})
         finally:
@@ -179,10 +181,10 @@ class Cleanup:
     def confirm_manual(self,cleanup_id,confirmation):
         if confirmation!='RETRAIT EFFECTUÉ':raise SafetyError('Confirmez RETRAIT EFFECTUÉ après votre action manuelle.')
         result=self.get(cleanup_id)
-        for action in result['items']:
+        for action in self._actions(cleanup_id):
             if action['status']!='manual_required':continue
             job,items=self._items(action['transfer_job_id']);item=next(i for i in items if i['file_id']==action['file_id'])
-            snapshot=self._opt_in(item)
+            snapshot=self._opt_in(item,source_expected=False)
             with self.archive(job,item) as guard:
                 if snapshot['kind']=='android':present=self.transfers.android.source_present(snapshot)
                 else:
@@ -199,16 +201,20 @@ class Cleanup:
             if not remaining:c.execute("UPDATE cleanup_jobs SET status='completed',message='Retraits contrôlés et archives revérifiées.' WHERE id=?",(cleanup_id,))
         return self.get(cleanup_id)
 
-    def get(self,cleanup_id):
+    def _actions(self,cleanup_id):
+        with self.db.connect() as c:return [dict(r) for r in c.execute('SELECT * FROM cleanup_actions WHERE cleanup_job_id=? ORDER BY id',(cleanup_id,))]
+
+    def get(self,cleanup_id,limit=100,offset=0):
         with self.db.connect() as c:
             row=c.execute('SELECT * FROM cleanup_jobs WHERE id=?',(cleanup_id,)).fetchone()
             if not row:raise ValueError('Nettoyage introuvable.')
-            items=[dict(r) for r in c.execute('SELECT * FROM cleanup_actions WHERE cleanup_job_id=? ORDER BY id',(cleanup_id,))]
-        return dict(row)|{'items':items,'warning':WARNING,'permanent_delete_supported':False}
+            items=[dict(r) for r in c.execute('SELECT * FROM cleanup_actions WHERE cleanup_job_id=? ORDER BY id LIMIT ? OFFSET ?',(cleanup_id,limit,offset))]
+            counts=dict(c.execute("SELECT count(*) AS total,coalesce(sum(status='manual_required'),0) AS manual_required FROM cleanup_actions WHERE cleanup_job_id=?",(cleanup_id,)).fetchone())
+        return dict(row)|counts|{'items':items,'warning':WARNING,'permanent_delete_supported':False}
 
     def list(self):
         with self.db.connect() as c:ids=[r[0] for r in c.execute('SELECT id FROM cleanup_jobs ORDER BY created DESC LIMIT 20')]
-        return [self.get(i) for i in ids]
+        return [self.get(i,limit=20) for i in ids]
 
     def close(self):
         self.stop.set()

@@ -18,6 +18,12 @@ from tests.test_core import PNG
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--exe',type=Path);p.add_argument('--source',action='store_true');args=p.parse_args()
+    run_env=os.environ.copy()
+    if os.name=='nt' and not args.source:
+        system=Path(os.environ.get('SystemRoot',r'C:\Windows'))
+        run_env['PATH']=';'.join((str(system/'System32'),str(system),str(system/'System32'/'WindowsPowerShell'/'v1.0')))
+        run_env.pop('PYTHONPATH',None)
+        run_env.pop('PYTHONHOME',None)
     command=[sys.executable,'-m','file_organizer'] if args.source else [str(args.exe.resolve())]
     with tempfile.TemporaryDirectory(prefix='FileOrganizer-Binary-',dir=Path.home() if os.name=='nt' else None) as tmp:
         base=Path(tmp);source=base/'personal';source.mkdir();dest=base/'archives';dest.mkdir()
@@ -25,7 +31,7 @@ def main():
         with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
         url=f'http://127.0.0.1:{port}'
         def start():
-            process=subprocess.Popen(command+['--no-browser','--port',str(port),'--data-dir',str(base/'state')],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
+            process=subprocess.Popen(command+['--no-browser','--port',str(port),'--data-dir',str(base/'state')],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,env=run_env)
             try:
                 for _ in range(100):
                     if process.poll() is not None:raise AssertionError(process.stderr.read().decode('utf-8','replace'))
@@ -59,15 +65,33 @@ def main():
             assert j['status']=='completed',j
             assert Path(j['items'][0]['destination']).read_bytes()==PNG
             assert source_file.read_bytes()==PNG
+            api('/api/cleanup/permission',{'root_id':state['config']['roots'][0]['id'],'enabled':True})
+            candidates=api('/api/cleanup/candidates?transfer_id='+j['id'])
+            assert len(candidates['items'])==1,candidates
+            assert source_file.exists()  # Proposal does not remove the source.
+            cleanup_review=api('/api/cleanup/prepare',{'transfer_id':j['id'],'file_ids':[candidates['items'][0]['file_id']]})
+            recycled=False
+            if os.name=='nt' and not args.source:
+                cleanup=api('/api/cleanup/start',{'review_id':cleanup_review['review_id'],'confirmation':'NETTOYER','acknowledge_single_copy':True})
+                for _ in range(300):
+                    cleanup=api('/api/cleanup?id='+cleanup['id'])
+                    if cleanup['status']!='running':break
+                    time.sleep(.2)
+                assert cleanup['status']=='completed',cleanup
+                receipt=json.loads(cleanup['items'][0]['receipt'])
+                assert receipt['method']=='windows_recycle_bin' and receipt['shell_item_confirmed']
+                assert not source_file.exists() and Path(j['items'][0]['destination']).read_bytes()==PNG
+                recycled=True
+                print('::notice title=Executable Windows sans Python dans PATH::Copie SHA-256 et recyclage natif confirmés sur données synthétiques.',flush=True)
             # A second process must not mutate recovery state of a running transfer/index.
             second=subprocess.run(command+['--no-browser','--data-dir',str(base/'state')],capture_output=True,timeout=30)
             assert second.returncode!=0
             process.terminate();process.wait(timeout=15)
             process,token=start()
             restored=api('/api/state')
-            assert restored['stats']['files']==1 and len(restored['config']['roots'])==1
+            assert restored['stats']['files']==(0 if recycled else 1) and len(restored['config']['roots'])==1
             assert restored['transfers'][0]['status']=='completed'
-            print('PASS distribution : inventaire, copie SHA-256, source preservee, instance unique, index et parametres conserves apres redemarrage.')
+            print('PASS distribution : inventaire, copie SHA-256, source preservee, proposition de nettoyage sans retrait, instance unique, index et parametres conserves apres redemarrage.')
         finally:
             if process.poll() is None:process.terminate();process.wait(timeout=15)
             process.stderr.close()
