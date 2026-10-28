@@ -8,6 +8,7 @@ permissions:
 jobs:
   tests:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
@@ -16,7 +17,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m unittest discover -v
+      - run: python -m tests.ci_runner
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.os }}
+          path: build/test-results-*.json
   windows-distribution:
     needs: tests
     runs-on: windows-latest
