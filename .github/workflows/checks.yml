@@ -71,6 +71,8 @@ jobs:
           Write-Host '::notice title=Persistance installateur::Configuration et index par defaut identiques avant et apres reinstallation.'
           python -m tests.binary_smoke --exe (Join-Path $installPath 'FileOrganizer.exe')
           if ($LASTEXITCODE -ne 0) { throw 'Verification apres reinstallation echouee' }
+          'Installation et reinstallation testees sans Python dans PATH ; configuration et index conserves.' | Set-Content dist/INSTALLER_VALIDATED.txt
+          Write-Host '::notice title=Installateur Windows valide::Installation, copie/recyclage, reinstallation et persistance verifies.'
       - uses: actions/upload-artifact@v4
         if: ${{ always() && hashFiles('dist/PORTABLE_VALIDATED.txt') != '' }}
         with:
@@ -80,4 +82,5 @@ jobs:
             dist/FileOrganizer-Setup-*-Windows-x64.exe
             dist/SHA256SUMS.txt
             dist/PORTABLE_VALIDATED.txt
+            dist/INSTALLER_VALIDATED.txt
           if-no-files-found: error

@@ -1,84 +1,80 @@
-# FileOrganizer 0.2 — inventaire et copies vérifiées
+# FileOrganizer 0.3 — organiser, archiver et retirer avec contrôle
 
-Application locale en français pour inventorier vos dossiers personnels, retrouver les doublons,
-préparer des archives et **copier après validation explicite**. Les fonctionnalités de la version 0.1
-sont conservées. Aucune suppression d’original, aucun déplacement, aucun formatage, aucune réparation.
+Application locale en français pour Windows 11 : inventaire, doublons SHA-256, copies vérifiées,
+assistant initial et nettoyage après archivage. Le projet 0.2 est conservé et enrichi.
+
+## Installer sur Windows
+
+Téléchargez l’artefact **FileOrganizer-0.3-Windows-x64** du [workflow Windows](https://github.com/bonjourslesgens/file-organizer/actions/workflows/checks.yml),
+décompressez-le, puis ouvrez `FileOrganizer-Setup-0.3.0-Windows-x64.exe`.
+L’application autonome inclut Python et pywin32 : **aucune installation manuelle de Python** sur le PC utilisateur.
+Les résultats réels, le commit et les liens de validation sont détaillés dans le [bilan](docs/BILAN.md).
+Les artefacts GitHub peuvent demander votre connexion ; un workflow en échec ne fournit pas une distribution validée.
+
+L’installateur fonctionne par utilisateur, sans service public ni lancement automatique.
+Les paramètres et l’index restent dans `%LOCALAPPDATA%\FileOrganizer` et sont conservés lors d’une mise à jour.
+Les binaires ne sont pas signés ; vérifiez la provenance et les sommes SHA-256 fournies.
 
 ## Première utilisation
 
-- **Distribution Windows autonome** : le projet fournit une compilation automatisée du `.exe` et
-  d’un installateur par utilisateur, avec Python inclus. **Aucun binaire Windows n’a pu être construit
-  ni exécuté dans cette session Linux.** Le workflow Windows doit encore tourner sur GitHub.
-- **Distribution source disponible maintenant** : installez Python 3.11+, décompressez le projet,
-  puis ouvrez `Lancer.cmd` sous Windows, ou lancez `python -m file_organizer` sous Linux.
-  Aucune dépendance Python d’exécution à installer.
+1. Lancez FileOrganizer depuis le menu Démarrer, puis ouvrez **Suivre le guide de démarrage**.
+2. Détectez les supports et autorisez des dossiers personnels précis.
+3. Vérifiez les protections obligatoires et, si souhaité, un dossier de destination sain.
+4. Adaptez catégories et règles puis lancez une **première analyse sans copie ni retrait**.
+5. Consultez doublons et simulations avant de décider d’une copie réelle.
 
-L’interface propose un guide de démarrage. Autorisez un dossier personnel précis puis lancez une
-analyse. Les paramètres, l’index, les plans et les transferts sont conservés entre les démarrages.
-Le serveur reste lié à `127.0.0.1` ; aucun port public et aucun agent distant ne sont activés.
+[Guide de première configuration](docs/PREMIERE_CONFIGURATION.md) · [Installation et mise à jour](docs/INSTALLATION.md)
 
-## Ce que fait cette version
+## Copie et nettoyage : deux validations séparées
 
-- Inventaire SQLite persistant, statistiques, recherche, filtres, étiquettes et rapports CSV/JSON.
-- Doublons exacts SHA-256 entre dossiers locaux et médias Android inventoriés.
-- Exclusions système/applications/jeux/dépendances, liens et fichiers sensibles par noms configurables.
-- Simulation par règles : âge, type, appareil/dossier, année/mois, vidéos DJI.
-- Sélection des propositions, diagnostic de destination, saisie de **COPIER** et validation temporaire
-  à usage unique avant le transfert réel.
-- Copie partielle sur la destination, vérification SHA-256 source/copie/fichier final,
-  publication sans remplacement, collisions gérées, pause et reprise manuelle après interruption.
-- Réutilisation d’un fichier déjà présent seulement après vérification de son contenu.
-- Diagnostic logique non destructif : volume, capacité, système de fichiers, accès, espace,
-  état Windows et modèle lorsqu’exposés. Unknown/RAW, lecture seule, volume changé ou inaccessible : blocage.
-- Android USB via ADB facultatif : autorisation de dossiers publics, inventaire média, aperçu d’images,
-  plans et flux directement vers la destination, sans staging massif sur le SSD du PC.
-- Surveillance **périodique** des dossiers locaux, classement dans l’index et simulations automatiques.
-  L’application doit rester ouverte ; aucune copie périodique ne se valide automatiquement.
-- Rubriques Appareils, Automatisation et Notifications, progression et historique.
+- La simulation décrit les fichiers et destinations sans écrire sur le support d’archives.
+- **COPIER** autorise une sélection précise, avec contrôle du volume, SHA-256 source/partiel/final,
+  collisions sans remplacement, pause et reprise. Les originaux restent présents à ce stade.
+- Les propositions de nettoyage exigent une autorisation distincte du dossier comme personnel/autonome.
+- Sources et archives sont relues ; ambiguïtés, changements, erreurs et supports indisponibles excluent le retrait.
+- **NETTOYER** et un avertissement de copie unique sont nécessaires avant toute action de retrait.
+- Windows utilise la Corbeille lorsque le mécanisme natif sûr est adapté. L’application ne la vide jamais.
+- Android reste en retrait manuel dans Galerie/Fichiers ; **aucun ordre ADB de suppression** n’est envoyé.
 
-**La copie ne libère pas d’espace sur la source.** Les originaux restent en place et aucun bouton de
-suppression n’est livré. Un Seagate contenant l’unique copie ne constitue pas une sauvegarde suffisante.
+La Corbeille continue à occuper l’espace jusqu’à son vidage manuel. Un seul exemplaire sur le Seagate
+n’est pas une sauvegarde indépendante. Préservez une seconde copie des fichiers irremplaçables.
+[Guide du nettoyage et restauration](docs/NETTOYAGE.md)
 
-## Essayer avec des données synthétiques
+## Fonctions conservées
 
-```console
-python -m file_organizer --demo
-```
+Inventaire SQLite persistant, statistiques globales, recherche et filtres, catégories/étiquettes,
+empreintes exactes, doublons entre sources locales et Android, aperçu d’images borné,
+règles d’âge/type, DJI/année/mois, simulations enregistrées, rapports CSV/JSON, journal et notifications.
+La surveillance est périodique et ne valide jamais une copie ou un nettoyage automatiquement.
+Le serveur écoute seulement sur `127.0.0.1` ; pas d’agent PC distant ni de port public.
 
-Un nouveau dossier `FileOrganizer-Demo-*` est créé. Pour ne pas utiliser une configuration précédente,
-ajoutez `--data-dir` suivi d’un dossier interne neuf. Le PDF et la vidéo de démo sont des en-têtes de
-test, pas des médias lisibles. Aucune source personnelle n’est autorisée automatiquement.
+## Seagate et Android
 
-Autres options : `--no-browser`, `--port 8765`, `--data-dir CHEMIN`, `--version`.
-Une seule instance peut utiliser un même dossier interne. `Ctrl+C` arrête l’application et demande
-la pause des opérations ; les copies partielles sont conservées pour une reprise manuelle.
+- [Diagnostiquer le Seagate sans écriture](docs/SEAGATE.md)
+- [Connecter l’Oukitel et gérer les retraits manuels](docs/ANDROID.md)
 
-## Tests
+Le statut historique « unknown » du Seagate n’est pas présumé résolu. Les tests dans le cloud
+n’accèdent pas à vos appareils réels. Le connecteur ADB est vérifié par simulation ; la recette
+Oukitel/câble/pilote reste nécessaire. Aucun formatage, initialisation ou réparation automatique.
+
+## Développer et tester
+
+Python 3.12 est la version de construction testée. Sur Windows, `py -3 -m pip install .` installe
+la dépendance native `pywin32==311` ; sous Linux, aucun paquet d’exécution n’est nécessaire.
+Lancez ensuite `python -m file_organizer` ou `Lancer.cmd` avec le même interpréteur sous Windows.
 
 ```console
 python -m unittest discover -v
 python -m tests.binary_smoke --source
+python -m file_organizer --demo
 ```
 
-Test navigateur facultatif (Playwright n’est pas une dépendance de l’application) :
+La démonstration crée un dossier neuf de données synthétiques. Pour un essai isolé, ajoutez
+`--data-dir CHEMIN_NEUF`. Les en-têtes MP4/PDF de la démo ne sont pas des médias lisibles.
+Les tests n’agissent que sur des données fictives. Sous Windows, les intégrations natives créent
+quelques entrées de Corbeille de test, sans jamais vider les autres entrées.
 
-```console
-python -m pip install playwright==1.62.0
-python -m playwright install chromium
-python -m tests.browser_smoke
-```
+Test Chromium facultatif : installez Playwright 1.62.0, son Chromium si nécessaire, puis
+`python -m tests.browser_smoke`. Construction Windows : `Construire-Windows.ps1 -Installer`.
 
-Le test navigateur utilise Chromium système s’il est disponible, sinon celui de Playwright.
-Les tests n’utilisent que des sources synthétiques ; les réponses ADB sont simulées.
-Consultez le [bilan](docs/BILAN.md) pour les résultats exacts et les validations matérielles manquantes.
-
-## Guides
-
-- [Installation, `.exe`, installateur Windows et mise à jour](docs/INSTALLATION.md)
-- [Première utilisation, copies, reprise, Android et automatisation](docs/UTILISATION.md)
-- [Architecture et garanties de sécurité](docs/ARCHITECTURE.md)
-- [Bilan et limites vérifiées](docs/BILAN.md)
-- [Configuration d’exemple](examples/config.json)
-
-Restent notamment : validation Windows 11/Oukitel/Seagate physiques, signature des binaires,
-connexion sécurisée au PC portable, métadonnées EXIF/GPS, similarité visuelle, recherche sémantique et IA.
+[Architecture et sécurité](docs/ARCHITECTURE.md) · [Rapport de validation](docs/BILAN.md)
